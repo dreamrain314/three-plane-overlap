@@ -1,0 +1,326 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>三图平行堆叠 · 3D 对照查看器</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --fg: #1f2328; --muted: #6b7280; --border: #d9dce1;
+    --card: #ffffff; --accent: #2f6bff;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.5 -apple-system, "Segoe UI", "Microsoft YaHei", system-ui, sans-serif; }
+  .wrap { max-width: 920px; margin: 0 auto; padding: 20px 16px 40px; }
+  h1 { font-size: 18px; font-weight: 500; margin: 0 0 4px; }
+  .hint { color: var(--muted); font-size: 12px; margin: 0 0 14px; }
+  .toolbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+  .field { display: flex; align-items: center; gap: 8px; flex: 1 1 240px; min-width: 200px; }
+  .field label { white-space: nowrap; color: var(--muted); font-size: 12px; }
+  .field output { font-size: 12px; font-variant-numeric: tabular-nums; min-width: 36px; text-align: right; }
+  input[type="range"] { flex: 1; accent-color: var(--accent); min-width: 70px; }
+  button { font: inherit; cursor: pointer; border: 1px solid var(--border); background: var(--card); color: var(--fg); border-radius: 8px; padding: 6px 12px; }
+  button:hover { border-color: #b9bec6; }
+  #stage { position: relative; height: clamp(300px, 58vw, 520px); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; background: linear-gradient(180deg, #fbfcfd, #eef0f3); }
+  #stage canvas { width: 100%; height: 100%; display: block; }
+  .rows { margin-top: 14px; display: flex; flex-direction: column; gap: 10px; }
+  .row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 8px 12px; }
+  .name { font-weight: 500; }
+  .status { color: var(--muted); font-size: 12px; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .slider { display: flex; align-items: center; gap: 6px; flex: 1 1 150px; min-width: 150px; }
+  .slider span { color: var(--muted); font-size: 12px; }
+  .slider output { font-size: 12px; font-variant-numeric: tabular-nums; min-width: 36px; text-align: right; }
+  .vis { display: flex; align-items: center; gap: 5px; color: var(--muted); font-size: 12px; user-select: none; cursor: pointer; }
+  .vis input { accent-color: var(--accent); }
+  footer { color: var(--muted); font-size: 12px; margin-top: 16px; }
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "./vendor/three.module.js",
+    "three/addons/": "./vendor/addons/"
+  }
+}
+</script>
+</head>
+<body>
+<div class="wrap">
+  <h1>三图平行堆叠 · 3D 对照查看器</h1>
+  <p class="hint">拖动旋转 · 滚轮缩放 · 右键平移 · 触屏单指旋转、双指缩放</p>
+
+  <div class="toolbar">
+    <div class="field">
+      <label for="sep">层间距</label>
+      <input type="range" id="sep" min="0.2" max="2" step="0.01" value="1">
+      <output id="sep-val">1.00</output>
+    </div>
+    <button id="reset" type="button">重置视角</button>
+  </div>
+
+  <div id="stage" role="img" aria-label="三张图片平行堆叠的三维场景，可拖动旋转查看重叠关系">
+    <canvas id="cv"></canvas>
+  </div>
+
+  <div class="rows">
+    <div class="row">
+      <span class="name">图1</span>
+      <span class="status" data-status="0">示例图</span>
+      <button type="button" data-load="0">换图</button>
+      <input type="file" accept="image/*" hidden data-file="0">
+      <span class="slider"><span>面</span><input type="range" min="0" max="1" step="0.01" value="0.55" data-surf="0" aria-label="图1 面板不透明度"><output data-surfval="0">55%</output></span>
+      <span class="slider"><span>图</span><input type="range" min="0" max="1" step="0.01" value="0.9" data-img="0" aria-label="图1 图片不透明度"><output data-imgval="0">90%</output></span>
+      <label class="vis"><input type="checkbox" checked data-vis="0" aria-label="显示图1">显示</label>
+    </div>
+    <div class="row">
+      <span class="name">图2</span>
+      <span class="status" data-status="1">示例图</span>
+      <button type="button" data-load="1">换图</button>
+      <input type="file" accept="image/*" hidden data-file="1">
+      <span class="slider"><span>面</span><input type="range" min="0" max="1" step="0.01" value="0.55" data-surf="1" aria-label="图2 面板不透明度"><output data-surfval="1">55%</output></span>
+      <span class="slider"><span>图</span><input type="range" min="0" max="1" step="0.01" value="0.9" data-img="1" aria-label="图2 图片不透明度"><output data-imgval="1">90%</output></span>
+      <label class="vis"><input type="checkbox" checked data-vis="1" aria-label="显示图2">显示</label>
+    </div>
+    <div class="row">
+      <span class="name">图3</span>
+      <span class="status" data-status="2">示例图</span>
+      <button type="button" data-load="2">换图</button>
+      <input type="file" accept="image/*" hidden data-file="2">
+      <span class="slider"><span>面</span><input type="range" min="0" max="1" step="0.01" value="0.55" data-surf="2" aria-label="图3 面板不透明度"><output data-surfval="2">55%</output></span>
+      <span class="slider"><span>图</span><input type="range" min="0" max="1" step="0.01" value="0.9" data-img="2" aria-label="图3 图片不透明度"><output data-imgval="2">90%</output></span>
+      <label class="vis"><input type="checkbox" checked data-vis="2" aria-label="显示图3">显示</label>
+    </div>
+  </div>
+
+  <footer>每个面由「衬底面」与「图片内容」两层组成，透明度独立可调；把「面」调到 0 可只看图片内容，「换图」可在本地替换任意一张。</footer>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { TrackballControls } from 'three/addons/controls/TrackballControls.js';
+
+const stage = document.getElementById('stage');
+const $ = (s) => document.querySelector(s);
+const $$ = (s) => Array.from(document.querySelectorAll(s));
+
+const S = 3, FR = 5.0;
+const renderer = new THREE.WebGLRenderer({ canvas: $('#cv'), antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+
+const scene = new THREE.Scene();
+const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 100);
+const controls = new TrackballControls(camera, renderer.domElement);
+controls.rotateSpeed = 3.0;
+controls.zoomSpeed = 0.9;
+controls.panSpeed = 0.8;
+controls.dynamicDampingFactor = 0.1;
+controls.minDistance = 2;
+controls.maxDistance = 60;
+
+const series = ['#2f6bff', '#e8833a', '#1e9e6b'];
+const paperColor = '#f5f3ee';
+const maxAniso = renderer.capabilities.getMaxAnisotropy();
+
+// 内置示例内容画在透明底上：衬底由「面」层承担，内容由「图」层承担
+function placeholder(letter, color, shape) {
+  const c = document.createElement('canvas');
+  c.width = 640; c.height = 640;
+  const g = c.getContext('2d');
+  g.strokeStyle = 'rgba(70,70,80,0.28)';
+  g.lineWidth = 1;
+  for (let i = 64; i < 640; i += 64) {
+    g.beginPath(); g.moveTo(i + 0.5, 0); g.lineTo(i + 0.5, 640); g.stroke();
+    g.beginPath(); g.moveTo(0, i + 0.5); g.lineTo(640, i + 0.5); g.stroke();
+  }
+  g.strokeStyle = 'rgba(70,70,80,0.6)';
+  g.lineWidth = 2;
+  g.beginPath(); g.moveTo(284, 320); g.lineTo(356, 320); g.stroke();
+  g.beginPath(); g.moveTo(320, 284); g.lineTo(320, 356); g.stroke();
+  g.setLineDash([12, 10]);
+  g.strokeStyle = 'rgba(70,70,80,0.55)';
+  g.lineWidth = 2.5;
+  g.beginPath(); g.arc(320, 320, 205, 0, Math.PI * 2); g.stroke();
+  g.setLineDash([]);
+  g.strokeStyle = color;
+  g.lineWidth = 16;
+  g.globalAlpha = 0.9;
+  if (shape === 'circle') {
+    g.beginPath(); g.arc(225, 245, 118, 0, Math.PI * 2); g.stroke();
+  } else if (shape === 'triangle') {
+    g.beginPath(); g.moveTo(445, 165); g.lineTo(555, 415); g.lineTo(335, 415); g.closePath(); g.stroke();
+  } else {
+    g.strokeRect(340, 330, 185, 185);
+  }
+  g.globalAlpha = 1;
+  g.fillStyle = color;
+  g.font = '500 92px "Segoe UI", system-ui, sans-serif';
+  g.textBaseline = 'top';
+  g.fillText(letter, 42, 34);
+  g.fillRect(42, 140, 56, 8);
+  return c;
+}
+
+const textures = [
+  placeholder('1', series[0], 'circle'),
+  placeholder('2', series[1], 'triangle'),
+  placeholder('3', series[2], 'square')
+].map((c) => {
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = maxAniso;
+  return t;
+});
+
+const geo = new THREE.PlaneGeometry(S, S);
+const edges = new THREE.EdgesGeometry(geo);
+const edgeMat = new THREE.LineBasicMaterial({ color: '#8a8f98', transparent: true, opacity: 0.5 });
+
+// 每个面 = 面板层（纯色半透明）+ 图片层（贴在面板前方 0.004）+ 边框线
+const planes = textures.map((t, i) => {
+  const surfMat = new THREE.MeshBasicMaterial({
+    color: paperColor,
+    transparent: true,
+    opacity: 0.55,
+    side: THREE.DoubleSide,
+    polygonOffset: true,
+    polygonOffsetFactor: 1,
+    polygonOffsetUnits: 1
+  });
+  const surf = new THREE.Mesh(geo, surfMat);
+  const imgMat = new THREE.MeshBasicMaterial({ map: t, transparent: true, opacity: 0.9, side: THREE.DoubleSide });
+  const imgMesh = new THREE.Mesh(geo, imgMat);
+  imgMesh.position.z = 0.004;
+  surf.add(imgMesh);
+  surf.add(new THREE.LineSegments(edges, edgeMat));
+  scene.add(surf);
+  return { surf, imgMesh, surfMat, imgMat };
+});
+
+const state = { sep: 1, surf: [0.55, 0.55, 0.55], img: [0.9, 0.9, 0.9], vis: [true, true, true] };
+
+function applyLayout() {
+  const s = state.sep;
+  planes.forEach((p) => p.surf.rotation.set(-Math.PI / 2, 0, 0));
+  planes[0].surf.position.set(0, s, 0);
+  planes[1].surf.position.set(0, 0, 0);
+  planes[2].surf.position.set(0, -s, 0);
+  controls.target.set(0, 0, 0);
+}
+
+function resetView() {
+  const dir = new THREE.Vector3(1, 1, 1).normalize();
+  camera.position.copy(controls.target).addScaledVector(dir, 14);
+  camera.up.set(0, 1, 0);
+  camera.zoom = 1;
+  camera.updateProjectionMatrix();
+  controls.update();
+}
+
+function resize() {
+  const w = stage.clientWidth, h = stage.clientHeight;
+  if (!w || !h) return;
+  renderer.setSize(w, h, false);
+  controls.handleResize();
+  const a = w / h;
+  camera.left = -FR * a / 2;
+  camera.right = FR * a / 2;
+  camera.top = FR / 2;
+  camera.bottom = -FR / 2;
+  camera.updateProjectionMatrix();
+}
+new ResizeObserver(resize).observe(stage);
+resize();
+
+const sepInput = $('#sep');
+const sepVal = $('#sep-val');
+const surfInputs = $$('[data-surf]');
+const surfVals = $$('[data-surfval]');
+const imgInputs = $$('[data-img]');
+const imgVals = $$('[data-imgval]');
+const visInputs = $$('[data-vis]');
+const statuses = $$('[data-status]');
+
+sepInput.addEventListener('input', () => {
+  state.sep = parseFloat(sepInput.value);
+  sepVal.textContent = state.sep.toFixed(2);
+  applyLayout();
+});
+
+$('#reset').addEventListener('click', () => {
+  applyLayout();
+  resetView();
+});
+
+surfInputs.forEach((inp, i) => inp.addEventListener('input', () => {
+  const v = parseFloat(inp.value);
+  state.surf[i] = v;
+  planes[i].surfMat.opacity = v;
+  surfVals[i].textContent = Math.round(v * 100) + '%';
+}));
+
+imgInputs.forEach((inp, i) => inp.addEventListener('input', () => {
+  const v = parseFloat(inp.value);
+  state.img[i] = v;
+  planes[i].imgMat.opacity = v;
+  imgVals[i].textContent = Math.round(v * 100) + '%';
+}));
+
+visInputs.forEach((inp, i) => inp.addEventListener('change', () => {
+  state.vis[i] = inp.checked;
+  planes[i].surf.visible = inp.checked;
+}));
+
+$$('[data-load]').forEach((btn) => {
+  const i = parseInt(btn.dataset.load, 10);
+  const fileInput = document.querySelector('[data-file="' + i + '"]');
+  btn.addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', () => {
+    const f = fileInput.files && fileInput.files[0];
+    if (!f) return;
+    const url = URL.createObjectURL(f);
+    const img = new Image();
+    img.onload = () => {
+      const t = new THREE.Texture(img);
+      t.colorSpace = THREE.SRGBColorSpace;
+      t.anisotropy = maxAniso;
+      t.needsUpdate = true;
+      planes[i].imgMat.map = t;
+      planes[i].imgMat.needsUpdate = true;
+      planes[i].surf.scale.y = img.height / img.width;
+      statuses[i].textContent = f.name.length > 22 ? f.name.slice(0, 21) + '…' : f.name;
+      URL.revokeObjectURL(url);
+    };
+    img.onerror = () => {
+      statuses[i].textContent = '图片加载失败';
+      URL.revokeObjectURL(url);
+    };
+    img.src = url;
+  });
+});
+
+// 内置三张图：images/a.*、images/b.*、images/c.*，逐个尝试常见扩展名，全部失败则保留示例图
+const loader = new THREE.TextureLoader();
+const EXTS = ['.png', '.jpg', '.jpeg', '.webp', '.gif', '.avif'];
+['images/a', 'images/b', 'images/c'].forEach((base, i) => {
+  const candidates = EXTS.map((e) => base + e);
+  (function tryNext(list) {
+    if (!list.length) return;
+    loader.load(list[0], (t) => {
+      t.colorSpace = THREE.SRGBColorSpace;
+      t.anisotropy = maxAniso;
+      planes[i].imgMat.map = t;
+      planes[i].imgMat.needsUpdate = true;
+      planes[i].surf.scale.y = t.image.height / t.image.width;
+      statuses[i].textContent = '内置：' + list[0].split('/').pop();
+    }, undefined, () => tryNext(list.slice(1)));
+  })(candidates);
+});
+
+applyLayout();
+resetView();
+renderer.setAnimationLoop(() => {
+  controls.update();
+  renderer.render(scene, camera);
+});
+</script>
+</body>
+</html>
